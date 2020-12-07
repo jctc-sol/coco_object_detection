@@ -3,3 +3,6 @@ val2017/*
 test2017/*
 annotations/*
 cocoapi/*
+.DS_Store
+.ipynb_checkpoints/*
+__pycache__/*
