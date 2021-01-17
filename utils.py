@@ -153,15 +153,18 @@ class Resize(object):
         
 
     def __call__(self, sample):
-        # resize image
+        # original image
         image = sample['image']
+        height, width = image.size()[1], image.size()[2]
+        # resize image
         new_image = FT.resize(image, self.target_size)
+        new_height, new_width = new_image.size()[1], new_image.size()[2]
         # resize boxes
-        boxes = sample['boxes']
-        boxes[:,0] = boxes[:,0] * new_image.width / image.width
-        boxes[:,1] = boxes[:,1] * new_image.height / image.height
-        boxes[:,2] = boxes[:,2] * new_image.width / image.width
-        boxes[:,3] = boxes[:,3] * new_image.height / image.height
+        boxes = sample['boxes']        
+        boxes[:,0] = boxes[:,0] * new_width / width
+        boxes[:,1] = boxes[:,1] * new_height / height
+        boxes[:,2] = boxes[:,2] * new_width / width
+        boxes[:,3] = boxes[:,3] * new_height / height
         sample['image'] = new_image
         sample['boxes'] = boxes
         return sample
