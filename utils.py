@@ -154,7 +154,7 @@ class Resize(object):
 
     def __call__(self, sample):
         # original image
-        image = sample['image']
+        image = sample['image']                
         height, width = image.size()[1], image.size()[2]
         # resize image
         new_image = FT.resize(image, self.target_size)

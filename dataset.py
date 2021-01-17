@@ -40,7 +40,7 @@ class CocoDataset(Dataset):
         # make cat->id and id->cat lookup dicts
         self.id2cat = {cat['id']: cat['name'] for cat in self.allcats}
         self.cat2id = {cat['name']: cat['id'] for cat in self.allcats}
-    
+        
     
     def __repr__(self):
         return f"COCO {self.dataset}; annoFile: {self.anno_file}; imgIds={self.imgIds}; catIds={self.catIds}"
@@ -76,7 +76,7 @@ class CocoDataset(Dataset):
 
 
     @classmethod
-    def collate_fn(cls, batch):
+    def collate_fn(cls, batch, img_resized=False):
         """
         custom collate function (to be passed to the DataLoader) for combining tensors of 
         different sizes into lists.
@@ -86,13 +86,19 @@ class CocoDataset(Dataset):
         cats   = list()
         boxes  = list()
         for sample in batch:
-            images.append(sample['image'])
+            images.append(sample['image'].unsqueeze(0))
             segs.append(sample['segs'])
             cats.append(sample['cats'])
             boxes.append(sample['boxes'])
+        
+        # if images have already been resized to same shape, then combine them into a 
+        # single 4-D tensor of (B, C, H, W)
+        if img_resized:
+            images = torch.cat(images, 0)
+                    
         batch = {'images': images,
                  'segs': segs,
                  'cats': cats,
-                 'boxes': boxes                 
+                 'boxes': boxes
                 }
         return batch
