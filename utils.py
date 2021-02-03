@@ -246,3 +246,69 @@ class BoxToTensor(object):
     
     def decode(self, tensor):
         return tensor.numpy()
+    
+    
+class Coco2CenterCoord():
+    """
+    Encodes/Decodes original COCO bounding box coordinates (x, y, w, h) where (x, y)
+    represent the top-left corner of bounding box (in image coordinate frame) to center 
+    coordinates (x_c, y_c, w_c, h_c) where (x_c, y_c) represent the center of the bounding box, 
+    furthermore, both (x_c, y_c) and (w_c, h_c) are normalized with respect to the original 
+    size of image
+    """       
+    def __init__(self, w, h):
+        self.w = w
+        self.h = h
+        
+    def encode(self, boxes):
+        """
+        boxes: bounding boxes tensor with coordinates in original COCO (x, y, w, h) format
+        """
+        x_c = (boxes[:,0] + boxes[:,2]/2.0)/self.w
+        y_c = (boxes[:,1] + boxes[:,3]/2.0)/self.h
+        w_c = boxes[:,2]/self.w
+        h_c = boxes[:,3]/self.h
+        coords = [x_c, y_c, w_c, h_c]        
+        return torch.cat([c.unsqueeze(-1) for c in coords], dim=-1)
+    
+    def decode(self, boxes_c):
+        """
+        boxes_c: bounding boxes tensor with coordinates in center coordinates (x_c, y_c, w_c, h_c) format
+        """
+        x = (boxes_c[:,0] - boxes_c[:,2]/2.0) * self.w
+        y = (boxes_c[:,1] - boxes_c[:,3]/2.0) * self.h
+        width  = boxes_c[:,2] * self.w
+        height = boxes_c[:,3] * self.h
+        coords = [x, y, width, height]        
+        return torch.cat([c.unsqueeze(-1) for c in coords], dim=-1)
+    
+
+class OffsetCoord():
+    """
+    Encodes/decodes the center coordinates (x_c, y_c, w_c, h_c) of bounding boxes relative to the prior 
+    boxes (from SSD, expressed also in center coordinates) in terms of offset coordinates. This offset 
+    coordinates is the form that is output by the SSD locator prediction. The offset coordinates have 
+    the following relation:
+    (dx, dy) = ((x_c - x_p)/(x_p/10), (y_c - y_p)/(y_p/10)); and 
+    (dw, dh) = (log(w_c/(w_p*5)), log(h_c/(h_p*5)))
+    """
+    def __init__(self):
+        pass
+        
+    def encode(self, cxcy, priors_cxcy):
+        """
+        cxcy: bounding box in center-coordinate format
+        prior_cxcy: prior box in center-coordinate format
+        """
+        dxdy = (cxcy[:,:2] - priors_cxcy[:,:2]) / (priors_cxcy[:,2:] / 10)
+        dwdh = torch.log(cxcy[:,2:] / priors_cxcy[:,2:]) * 5
+        return torch.cat([dxdy, dwdh], dim=1)
+    
+    
+    def decode(self, dxdy, priors_cxcy):
+        """
+        dxdy: bounding boxes in offset-coordinate format wrt SSD's prior bounding boxes
+        """
+        cxcy = dxdy[:,:2] * priors_cxcy[:,2:] / 10 + priors_cxcy[:,:2]
+        cwch = torch.exp(dxdy[:,2:] / 5) * priors_cxcy[:,2:]
+        return torch.cat([cxcy, cwch], dim=1)        

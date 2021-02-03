@@ -6,7 +6,6 @@ from torchvision.models import vgg16
 from dataset import CocoDataset
 from utils   import *
 from math import sqrt
-from torchvision import transforms
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
