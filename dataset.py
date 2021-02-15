@@ -37,9 +37,16 @@ class CocoDataset(Dataset):
         # get all categories
         allCatIds = self.coco.getCatIds()
         self.allcats = self.coco.loadCats(allCatIds)
-        # make cat->id and id->cat lookup dicts
-        self.id2cat = {cat['id']: cat['name'] for cat in self.allcats}
-        self.cat2id = {cat['name']: cat['id'] for cat in self.allcats}
+        # create various cat->id and id->cat lookup dicts
+        # note that cocoIds skip some integers so we re-create another set of category IDs 
+        # that are continuous and reserve 0 for background
+        self.cocoId2id, self.id2cocoId = {0:0}, {0:0}
+        self.id2cat, self.cat2id = {0:'background'}, {'background':0}
+        for i, cat in enumerate(self.allcats, 1):
+            self.id2cocoId[i] = cat['id']
+            self.cocoId2id[cat['id']] = i
+            self.id2cat[i] = cat['name']
+            self.cat2id[cat['name']] = i
         
     
     def __repr__(self):
@@ -63,7 +70,7 @@ class CocoDataset(Dataset):
         for anno in annotations:
             if anno['iscrowd']==0:
                 segmaps.append(anno['segmentation'])
-                cats.append(anno['category_id'])
+                cats.append(self.cocoId2id[anno['category_id']])
                 boxes.append(anno['bbox'])
         sample = {'image': img, # PILImage
                   'segs' : segmaps, # list of INT of length N

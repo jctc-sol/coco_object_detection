@@ -246,7 +246,38 @@ class BoxToTensor(object):
     
     def decode(self, tensor):
         return tensor.numpy()
+
     
+class BoundaryCoord():
+    """
+    Encodes/decodes the bounding box center coordinates (x_c, y_c, w_c, h_c) to/from boundary coordinates 
+    (x_1, y_1, x_2, y_2) where (x_1, y_1) specifies the upper-left corner and (x_2, y_2) the lower-right
+    corner of the boundary of bounding boxes
+    """        
+    def encode(self, boxes):
+        """
+        boxes: bounding boxes tensor in center coordinates (x_c, y_c, w_c, h_c) format
+        return: bounding boxes tensor in boundary coordinates (x_1, y_1, x_2, y_2) format
+        """
+        x1 = boxes[:,0] - boxes[:,2]/2.0
+        y1 = boxes[:,1] - boxes[:,3]/2.0
+        x2 = boxes[:,0] + boxes[:,2]/2.0
+        y2 = boxes[:,1] + boxes[:,3]/2.0        
+        coords = [x1, y1, x2, y2]        
+        return torch.cat([c.unsqueeze(-1) for c in coords], dim=-1)    
+        
+    def decode(self, boxes):
+        """
+        boxes: bounding boxes tensor in boundary coordinates (x_1, y_1, x_2, y_2) format
+        return: bounding boxes tensor in center coordinates (x_c, y_c, w_c, h_c) format
+        """
+        w_c = boxes[:,2] - boxes[:,0]
+        h_c = boxes[:,3] - boxes[:,1]
+        x_c = boxes[:,0] + w_c/2.0
+        y_c = boxes[:,1] + h_c/2.0
+        coords = [x_c, y_c, w_c, h_c]
+        return torch.cat([c.unsqueeze(-1) for c in coords], dim=-1)
+
     
 class Coco2CenterCoord():
     """
