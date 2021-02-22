@@ -250,12 +250,14 @@ class BoxToTensor(object):
     
 class BoundaryCoord():
     """
-    Encodes/decodes the bounding box center coordinates (x_c, y_c, w_c, h_c) to/from boundary coordinates 
+    Encodes/decodes the bounding box Center coordinates (x_c, y_c, w_c, h_c) to/from Boundary coordinates 
     (x_1, y_1, x_2, y_2) where (x_1, y_1) specifies the upper-left corner and (x_2, y_2) the lower-right
     corner of the boundary of bounding boxes
     """        
     def encode(self, boxes):
         """
+        Encodes bounding boxes tensor in Center coordinates to Boundary coordinates.
+        
         boxes: bounding boxes tensor in center coordinates (x_c, y_c, w_c, h_c) format
         return: bounding boxes tensor in boundary coordinates (x_1, y_1, x_2, y_2) format
         """
@@ -268,6 +270,8 @@ class BoundaryCoord():
         
     def decode(self, boxes):
         """
+        Decodes bounding boxes tensor in Boundary coordinates to Center coordinates.
+        
         boxes: bounding boxes tensor in boundary coordinates (x_1, y_1, x_2, y_2) format
         return: bounding boxes tensor in center coordinates (x_c, y_c, w_c, h_c) format
         """
@@ -282,7 +286,7 @@ class BoundaryCoord():
 class Coco2CenterCoord():
     """
     Encodes/Decodes original COCO bounding box coordinates (x, y, w, h) where (x, y)
-    represent the top-left corner of bounding box (in image coordinate frame) to center 
+    represent the top-left corner of bounding box (in image coordinate frame) to Center 
     coordinates (x_c, y_c, w_c, h_c) where (x_c, y_c) represent the center of the bounding box, 
     furthermore, both (x_c, y_c) and (w_c, h_c) are normalized with respect to the original 
     size of image
@@ -293,6 +297,7 @@ class Coco2CenterCoord():
         
     def encode(self, boxes):
         """
+        Encodes bounding boxes tensor in COCO coordinates to Center coordinates.
         boxes: bounding boxes tensor with coordinates in original COCO (x, y, w, h) format
         """
         x_c = (boxes[:,0] + boxes[:,2]/2.0)/self.w
@@ -304,6 +309,7 @@ class Coco2CenterCoord():
     
     def decode(self, boxes_c):
         """
+        Decodes bounding boxes tensor in Center coordinates coordinates to COCO coordinates.
         boxes_c: bounding boxes tensor with coordinates in center coordinates (x_c, y_c, w_c, h_c) format
         """
         x = (boxes_c[:,0] - boxes_c[:,2]/2.0) * self.w
@@ -342,4 +348,49 @@ class OffsetCoord():
         """
         cxcy = dxdy[:,:2] * priors_cxcy[:,2:] / 10 + priors_cxcy[:,:2]
         cwch = torch.exp(dxdy[:,2:] / 5) * priors_cxcy[:,2:]
-        return torch.cat([cxcy, cwch], dim=1)        
+        return torch.cat([cxcy, cwch], dim=1)
+    
+    
+def find_intersection(set_1, set_2):
+    """
+    Find the intersection of every box combination between two sets of boxes that are in 
+    boundary coordinates (x_1, y_1, x_2, y_2)
+    :param set_1: set 1, a tensor of dimensions (n1, 4) in boundary coordinates
+    :param set_2: set 2, a tensor of dimensions (n2, 4) in boundary coordinates
+    :return: intersection of each of the boxes in set 1 with respect to each of the boxes 
+             in set 2, a tensor of dimensions (n1, n2)
+    """    
+    # Following code from: https://github.com/sgrvinod/a-PyTorch-Tutorial-to-Object-Detection/blob/master/utils.py
+    # PyTorch auto-broadcasts singleton dimensions
+    lower_bounds = torch.max(set_1[:, :2].unsqueeze(1), set_2[:, :2].unsqueeze(0))  # (n1, n2, 2)
+    upper_bounds = torch.min(set_1[:, 2:].unsqueeze(1), set_2[:, 2:].unsqueeze(0))  # (n1, n2, 2)
+    intersection_dims = torch.clamp(upper_bounds - lower_bounds, min=0)  # (n1, n2, 2)
+    return intersection_dims[:, :, 0] * intersection_dims[:, :, 1]  # (n1, n2)
+
+
+def find_jaccard_overlap(set_1, set_2):
+    """
+    Find the Jaccard Overlap (IoU) of every box combination between two sets of boxes that are in boundary coordinates.
+    :param set_1: set 1, a tensor of dimensions (n1, 4)
+    :param set_2: set 2, a tensor of dimensions (n2, 4)
+    :return: Jaccard Overlap of each of the boxes in set 1 with respect to each of the boxes in set 2, a tensor of dimensions (n1, n2)
+    
+    Code from: https://github.com/sgrvinod/a-PyTorch-Tutorial-to-Object-Detection/blob/master/utils.py
+    """
+    # convert from center coordinates to boundary coordinates
+    bcoord = BoundaryCoord()
+    set_1 = bcoord.encode(set_1)
+    set_2 = bcoord.encode(set_2)
+    
+    # Find intersections
+    intersection = find_intersection(set_1, set_2)  # (n1, n2)
+
+    # Find areas of each box in both sets
+    areas_set_1 = (set_1[:, 2] - set_1[:, 0]) * (set_1[:, 3] - set_1[:, 1])  # (n1)
+    areas_set_2 = (set_2[:, 2] - set_2[:, 0]) * (set_2[:, 3] - set_2[:, 1])  # (n2)
+
+    # Find the union
+    # PyTorch auto-broadcasts singleton dimensions
+    union = areas_set_1.unsqueeze(1) + areas_set_2.unsqueeze(0) - intersection  # (n1, n2)
+
+    return intersection / union  # (n1, n2)
