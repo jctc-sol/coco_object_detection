@@ -59,7 +59,7 @@ class CocoDataset(Dataset):
         
     def __getitem__(self, idx):
         # load image using PIL for better integration with native torch transforms
-        img = Image.open(f"{self.img_dir}/{self.imgs[idx]['file_name']}")
+        img = Image.open(f"{self.img_dir}/{self.imgs[idx]['file_name']}").convert('RGB')
         # load annotations associated with the image
         annIds = self.coco.getAnnIds(imgIds=self.imgs[idx]['id'])
         annotations = self.coco.loadAnns(annIds)
