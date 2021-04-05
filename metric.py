@@ -5,17 +5,18 @@ from torch import nn
 from utils   import *
 
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-
 class mAP():
     
-    def __init__(self, n_classes):
+    def __init__(self, n_classes, device):
         """
         :param n_classes: number of class objects to compute mean AP over; note that 0 
                           should be reserved as background class
         """
         self.n_classes = n_classes
+        if device is None:
+            self.device = "cpu"
+        else:
+            self.device = device
         
         
     def concat_batch_tensors(boxes, labels, scores=None):
@@ -42,7 +43,7 @@ class mAP():
         for idx in range(n_images):
             n_objects_in_img = boxes[idx].size(0)
             img_idx.extend([idx] * n_objects_in_img)        
-        img_idx = torch.LongTensor(img_idx).to(device)
+        img_idx = torch.LongTensor(img_idx).to(self.device)
         boxes   = torch.cat(boxes, dim=0)
         labels  = torch.cat(labels, dim=0)
         assert img_idx.size(0) == boxes.size(0) == labels.size(0), "tensor size mismatch"
@@ -84,11 +85,11 @@ class mAP():
         
         # initialize tensors to keep track of:
         # a) which true objects with this class have been 'detected'
-        true_class_boxes_detected = torch.zeros((true_class_boxes.size(0)), dtype=torch.uint8).to(device)
+        true_class_boxes_detected = torch.zeros((true_class_boxes.size(0)), dtype=torch.uint8).to(self.device)
         # b) which detected boxes are true positives
-        tp = torch.zeros((n_detections), dtype=torch.float).to(device)
+        tp = torch.zeros((n_detections), dtype=torch.float).to(self.device)
         # c) which detected boxes are flase positives
-        fp = torch.zeros((n_detections), dtype=torch.float).to(device)
+        fp = torch.zeros((n_detections), dtype=torch.float).to(self.device)
         
         # iterate through each detection & check whether it is true-positive or false-positive
         for d in range(n_detections):
@@ -127,7 +128,7 @@ class mAP():
         
         # create thresholds between [0,1] with 0.1 increments
         recall_thresholds = torch.arange(start=0, end=1.1, step=0.1).tolist()
-        precisions        = torch.zeros((len(recall_thresholds)), dtype=torch.float).to(device)
+        precisions        = torch.zeros((len(recall_thresholds)), dtype=torch.float).to(self.device)
         for i, t in enumerate(recall_thresholds):
             recalls_above_t = cumsum_recall >= t
             if recalls_above_t.any():
