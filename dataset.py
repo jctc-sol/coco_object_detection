@@ -37,10 +37,17 @@ class CocoDataset(Dataset):
         # get all categories
         allCatIds = self.coco.getCatIds()
         self.allcats = self.coco.loadCats(allCatIds)
-        # make cat->id and id->cat lookup dicts
-        self.id2cat = {cat['id']: cat['name'] for cat in self.allcats}
-        self.cat2id = {cat['name']: cat['id'] for cat in self.allcats}
-    
+        # create various cat->id and id->cat lookup dicts
+        # note that cocoIds skip some integers so we re-create another set of category IDs 
+        # that are continuous and reserve 0 for background
+        self.cocoId2id, self.id2cocoId = {0:0}, {0:0}
+        self.id2cat, self.cat2id = {0:'background'}, {'background':0}
+        for i, cat in enumerate(self.allcats, 1):
+            self.id2cocoId[i] = cat['id']
+            self.cocoId2id[cat['id']] = i
+            self.id2cat[i] = cat['name']
+            self.cat2id[cat['name']] = i
+        
     
     def __repr__(self):
         return f"COCO {self.dataset}; annoFile: {self.anno_file}; imgIds={self.imgIds}; catIds={self.catIds}"
@@ -52,7 +59,7 @@ class CocoDataset(Dataset):
         
     def __getitem__(self, idx):
         # load image using PIL for better integration with native torch transforms
-        img = Image.open(f"{self.img_dir}/{self.imgs[idx]['file_name']}")
+        img = Image.open(f"{self.img_dir}/{self.imgs[idx]['file_name']}").convert('RGB')
         # load annotations associated with the image
         annIds = self.coco.getAnnIds(imgIds=self.imgs[idx]['id'])
         annotations = self.coco.loadAnns(annIds)
@@ -63,7 +70,7 @@ class CocoDataset(Dataset):
         for anno in annotations:
             if anno['iscrowd']==0:
                 segmaps.append(anno['segmentation'])
-                cats.append(anno['category_id'])
+                cats.append(self.cocoId2id[anno['category_id']])
                 boxes.append(anno['bbox'])
         sample = {'image': img, # PILImage
                   'segs' : segmaps, # list of INT of length N
@@ -76,7 +83,7 @@ class CocoDataset(Dataset):
 
 
     @classmethod
-    def collate_fn(cls, batch):
+    def collate_fn(cls, batch, img_resized=False):
         """
         custom collate function (to be passed to the DataLoader) for combining tensors of 
         different sizes into lists.
@@ -86,13 +93,19 @@ class CocoDataset(Dataset):
         cats   = list()
         boxes  = list()
         for sample in batch:
-            images.append(sample['image'])
+            images.append(sample['image'].unsqueeze(0))
             segs.append(sample['segs'])
             cats.append(sample['cats'])
             boxes.append(sample['boxes'])
+        
+        # if images have already been resized to same shape, then combine them into a 
+        # single 4-D tensor of (B, C, H, W)
+        if img_resized:
+            images = torch.cat(images, 0)
+                    
         batch = {'images': images,
                  'segs': segs,
                  'cats': cats,
-                 'boxes': boxes                 
+                 'boxes': boxes
                 }
         return batch
