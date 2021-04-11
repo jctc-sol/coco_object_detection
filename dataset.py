@@ -25,7 +25,7 @@ class CocoDataset(Dataset):
         `transforms`: list of transforms to apply on each sample drawn from the dataset; defaults to None
         """
         self.dataset   = dataset
-        self.img_dir   = f"{data_dir}/{dataset}"
+        self.img_dir   = f"{data_dir}/coco_{dataset}"
         self.anno_file = f"{data_dir}/annotations/{anno_type}_{dataset}.json"
         self.coco = COCO(self.anno_file)
         self.imgIds    = imgIds

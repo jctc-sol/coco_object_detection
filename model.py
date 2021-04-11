@@ -118,8 +118,8 @@ class VGGBase(nn.Module):
         out = F.relu(self.conv6(out))
         conv7_features = F.relu(self.conv7(out))
         return conv4_3_features, conv7_features
-    
-    
+
+
 class AuxLayers(nn.Module):
     """
     Auxiliary layers subsequent to the VGG base module of SSD
@@ -171,8 +171,8 @@ class AuxLayers(nn.Module):
         out = F.relu(self.conv11_2(out))
         conv11_2_ft = out
         return conv8_2_ft, conv9_2_ft, conv10_2_ft, conv11_2_ft
-    
-    
+
+
 class PredLayers(nn.Module):
     """
     Prediction conv layers to output bound box output and class probabilities
@@ -286,8 +286,8 @@ class PredLayers(nn.Module):
         class_scores = torch.cat([cl_conv4_3, cl_conv7, cl_conv8_2, cl_conv9_2, cl_conv10_2, cl_conv11_2], dim=1)
         
         return locations, class_scores
-    
-    
+
+
 class SSD300(nn.Module):
     
     def __init__(self, n_classes, device=None):
