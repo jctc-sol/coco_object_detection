@@ -319,6 +319,11 @@ class SSD300(nn.Module):
         # output in center coordinate format to boundary box coordinate format
         self.cc2bc = BoundaryCoord()
         
+
+    def fine_tune(self, freeze_backbone=True):
+        for param in self.base.parameters():
+            param.requires_grad = not freeze_backbone
+
         
     def create_prior_boxes(self):
         """
