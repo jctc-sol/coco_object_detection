@@ -1,6 +1,5 @@
 from utils import *
 from torch import nn
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 class MultiBoxLoss(nn.Module):
@@ -12,7 +11,7 @@ class MultiBoxLoss(nn.Module):
     Code reference: https://github.com/sgrvinod/a-PyTorch-Tutorial-to-Object-Detection/blob/master/model.py#L532
     """
     
-    def __init__(self, img_sz, pboxes, threshold=0.5, neg_pos_ratio=3, alpha=1.):
+    def __init__(self, img_sz, pboxes, threshold=0.5, neg_pos_ratio=3, alpha=1., device=None):
         """
         :param img_sz: input image size into object detection model (assumed to be square)
         :param pboxes: prior bounding boxes of object detection model in center coordinates
@@ -21,6 +20,10 @@ class MultiBoxLoss(nn.Module):
         :param alpha: relative weighting between localization & classification losses
         """
         super(MultiBoxLoss, self).__init__()
+        if device is None:
+            self.device = "cpu"
+        else:
+            self.device = device
         self.pboxes = pboxes
         self.threshold = threshold
         self.neg_pos_ratio = neg_pos_ratio
@@ -51,8 +54,8 @@ class MultiBoxLoss(nn.Module):
         assert n_priors == pred_boxes.size(1) == pred_scores.size(1)
         
         # init tensors for recording all ground truth objects/labels allocated to each prior bounding boxes
-        true_locs = torch.zeros_like(pred_boxes, dtype=torch.float).to(device)  # (N, 8732, 4)
-        true_cls  = torch.zeros((bs, n_priors), dtype=torch.long).to(device)    # (N, 8732)
+        true_locs = torch.zeros_like(pred_boxes, dtype=torch.float).to(self.device)  # (N, 8732, 4)
+        true_cls  = torch.zeros((bs, n_priors), dtype=torch.long).to(self.device)    # (N, 8732)
         
         # for each image in batch, we want to find the best ground truth object that each prior bounding box 
         # captures in terms of maximum IoU overlap. More specifically, we want to:
@@ -76,7 +79,7 @@ class MultiBoxLoss(nn.Module):
             # ** two potential problem scenarios to mitigate:
             # 1) none of the prior bounding boxes have overlap with groundtruth object > 0.5 and therefore the object is taken as background
             # Solution: assign each object to the corresponding maximum-overlap-prior. (This fixes 1.)
-            obj_idx_for_each_prior[best_pbox_for_each_obj] = torch.LongTensor(range(n_objs)).to(device)
+            obj_idx_for_each_prior[best_pbox_for_each_obj] = torch.LongTensor(range(n_objs)).to(self.device)
             # 2) a groundtruth object is not found as the maximum overlapped object with any of the prior bounding boxes
             # Solution: artificially set IoU overlap with the best bounding box to 1 to ensure each object is captured by 1 prior bounding box
             obj_overlap_for_each_prior[best_pbox_for_each_obj] = 1.
@@ -120,7 +123,7 @@ class MultiBoxLoss(nn.Module):
         cls_loss_neg[positive_priors] = 0.
         # sort losses in decending order
         cls_loss_neg, _ = cls_loss_all.sort(dim=1, descending=True)
-        hardness_ranks = torch.LongTensor(range(n_priors)).unsqueeze(0).expand_as(cls_loss_neg).to(device)  # (N, 8732)        
+        hardness_ranks = torch.LongTensor(range(n_priors)).unsqueeze(0).expand_as(cls_loss_neg).to(self.device)  # (N, 8732)        
         hard_neg = hardness_ranks < n_neg_samples.unsqueeze(-1) # (N, 8732)
         # HNM LOSS
         cls_loss_hard_neg = cls_loss_neg[hard_neg].sum()

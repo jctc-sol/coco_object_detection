@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+import requests
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms, utils
 from PIL import Image
@@ -13,7 +14,7 @@ class CocoDataset(Dataset):
     Use `conda install -c conda-forge pycocotools` to install.
     """
     
-    def __init__(self, data_dir, dataset, anno_type, imgIds=[], catIds=[], transforms=None):
+    def __init__(self, data_dir, dataset, anno_type, imgIds=[], catIds=[], transforms=None, from_url=None):
         """
         Initializes the pycocotools API as `self.coco`.
         Params:
@@ -31,6 +32,7 @@ class CocoDataset(Dataset):
         self.imgIds    = imgIds
         self.catIds    = catIds
         self.transforms= transforms
+        self.from_url = from_url
         imgIds = self.coco.getImgIds(imgIds=imgIds, catIds=catIds)
         imgIds = list(sorted(imgIds))
         self.imgs = self.coco.loadImgs(imgIds)
@@ -58,8 +60,14 @@ class CocoDataset(Dataset):
         
         
     def __getitem__(self, idx):
-        # load image using PIL for better integration with native torch transforms
-        img = Image.open(f"{self.img_dir}/{self.imgs[idx]['file_name']}").convert('RGB')
+        if self.from_url and isinstance(self.from_url, str):
+            if self.from_url.lower() == 'coco':
+                img = Image.open(requests.get(self.imgs[idx]['coco_url'], stream=True).raw).convert('RGB')
+            elif self.from_url.lower() == 'flickr':
+                img = Image.open(requests.get(self.imgs[idx]['flickr_url'], stream=True).raw).convert('RGB')
+        else:
+            # load image using PIL for better integration with native torch transforms
+            img = Image.open(f"{self.img_dir}/{self.imgs[idx]['file_name']}").convert('RGB')
         # load annotations associated with the image
         annIds = self.coco.getAnnIds(imgIds=self.imgs[idx]['id'])
         annotations = self.coco.loadAnns(annIds)
@@ -67,6 +75,7 @@ class CocoDataset(Dataset):
         segmaps  = list()
         cats     = list()
         boxes    = list()
+        dims     = np.array(img.size)
         for anno in annotations:
             if anno['iscrowd']==0:
                 segmaps.append(anno['segmentation'])
@@ -76,6 +85,7 @@ class CocoDataset(Dataset):
                   'segs' : segmaps, # list of INT of length N
                   'cats' : np.stack(cats, axis=0)  if len(cats)>0  else np.stack([0], axis=0), # [N, 1]
                   'boxes': np.stack(boxes, axis=0) if len(boxes)>0 else np.stack([[0,0,0,0]], axis=0), # [N,4]
+                  'dims' : dims # [w,h] of original image
                  }
         if self.transforms:
             sample = self.transforms(sample)
@@ -92,11 +102,13 @@ class CocoDataset(Dataset):
         segs   = list()
         cats   = list()
         boxes  = list()
+        dims   = list()
         for sample in batch:
             images.append(sample['image'].unsqueeze(0))
             segs.append(sample['segs'])
             cats.append(sample['cats'])
             boxes.append(sample['boxes'])
+            dims.append(sample['dims'])
         
         # if images have already been resized to same shape, then combine them into a 
         # single 4-D tensor of (B, C, H, W)
@@ -106,6 +118,7 @@ class CocoDataset(Dataset):
         batch = {'images': images,
                  'segs': segs,
                  'cats': cats,
-                 'boxes': boxes
+                 'boxes': boxes,
+                 'dims': dims
                 }
         return batch

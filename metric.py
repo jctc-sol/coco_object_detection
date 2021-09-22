@@ -5,20 +5,22 @@ from torch import nn
 from utils   import *
 
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-
 class mAP():
     
-    def __init__(self, n_classes):
+    def __init__(self, n_classes, device):
         """
         :param n_classes: number of class objects to compute mean AP over; note that 0 
                           should be reserved as background class
         """
+        self.name = "mAP"
         self.n_classes = n_classes
+        if device is None:
+            self.device = "cpu"
+        else:
+            self.device = device
+    
         
-        
-    def concat_batch_tensors(boxes, labels, scores=None):
+    def concat_batch_tensors(self, boxes, labels, scores=None):
         """
         Each batch contains M images, and each image contains N_i objects within (since each object contains
         different numbr of objects). As a result, each of boxes, labels, scores are in the form of list of 
@@ -42,7 +44,7 @@ class mAP():
         for idx in range(n_images):
             n_objects_in_img = boxes[idx].size(0)
             img_idx.extend([idx] * n_objects_in_img)        
-        img_idx = torch.LongTensor(img_idx).to(device)
+        img_idx = torch.LongTensor(img_idx).to(self.device)
         boxes   = torch.cat(boxes, dim=0)
         labels  = torch.cat(labels, dim=0)
         assert img_idx.size(0) == boxes.size(0) == labels.size(0), "tensor size mismatch"
@@ -54,7 +56,7 @@ class mAP():
                 'scores': scores}
         
         
-    def class_specific_mAP(truths, preds, category):
+    def class_specific_mAP(self, truths, preds, category):
         """
         :param truths: dictionary containing ground truth information with keys 'img', 'boxes', 'labels', 'scores'
         :param preds:  dictionary containing predicted information with keys 'img', 'boxes', 'labels', 'scores'
@@ -84,11 +86,11 @@ class mAP():
         
         # initialize tensors to keep track of:
         # a) which true objects with this class have been 'detected'
-        true_class_boxes_detected = torch.zeros((true_class_boxes.size(0)), dtype=torch.uint8).to(device)
+        true_class_boxes_detected = torch.zeros((true_class_boxes.size(0)), dtype=torch.uint8).to(self.device)
         # b) which detected boxes are true positives
-        tp = torch.zeros((n_detections), dtype=torch.float).to(device)
+        tp = torch.zeros((n_detections), dtype=torch.float).to(self.device)
         # c) which detected boxes are flase positives
-        fp = torch.zeros((n_detections), dtype=torch.float).to(device)
+        fp = torch.zeros((n_detections), dtype=torch.float).to(self.device)
         
         # iterate through each detection & check whether it is true-positive or false-positive
         for d in range(n_detections):
@@ -107,7 +109,7 @@ class mAP():
             # current (single) detected bounding box and ground truth boxes (multiple), then it is a 
             # true-positive; false-positives otherwise
             overlaps = find_jaccard_overlap(this_box, true_boxes) # (1, n_true_objects_in_img)
-            max_overlap, idx = torch.max(overlaps.squeenze(0), dim=0)
+            max_overlap, idx = torch.max(overlaps.squeeze(0), dim=0)
             # get the original_idx position of this object within the true_class_boxes_detected tensor
             # this is used to check whether this object has already been detected prior
             origin_idx = torch.LongTensor(range(true_class_boxes.size(0)))[true_class_images==this_img][idx]            
@@ -127,7 +129,7 @@ class mAP():
         
         # create thresholds between [0,1] with 0.1 increments
         recall_thresholds = torch.arange(start=0, end=1.1, step=0.1).tolist()
-        precisions        = torch.zeros((len(recall_thresholds)), dtype=torch.float).to(device)
+        precisions        = torch.zeros((len(recall_thresholds)), dtype=torch.float).to(self.device)
         for i, t in enumerate(recall_thresholds):
             recalls_above_t = cumsum_recall >= t
             if recalls_above_t.any():
@@ -162,17 +164,17 @@ class mAP():
         
         # we want to concatenate the list of tensors together within each list, to do that, we first need 
         # to track which object belongs to which image
-        truths = concat_batch_tensors(true_boxes, true_labels)
+        truths = self.concat_batch_tensors(true_boxes, true_labels)
         
         # because the number of predicted objects may not necessarily match the actual number of objects, we 
         # also need to do the same for predicted tensors separately
-        preds  = concat_batch_tensors(pred_boxes, pred_labels, pred_scores)
+        preds  = self.concat_batch_tensors(pred_boxes, pred_labels, pred_scores)
         
         # iterate over each category to compute the average precision of the detections for that category 
         avg_precisions = torch.zeros((self.n_classes - 1), dtype=torch.float)
         AP = {}
         for c in range(1, self.n_classes):
-            avg_precisions[c-1] = class_specific_mAP(truths, preds, c)
+            avg_precisions[c-1] = self.class_specific_mAP(truths, preds, c)
             AP[c] = avg_precisions[c-1]
         # further compute the mean over the average precisions over all categories
         mAP = avg_precisions.mean().item()

@@ -6,7 +6,6 @@ from torchvision.models import vgg16
 from dataset import CocoDataset
 from utils   import *
 from math import sqrt
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def decimate(tensor, m):
@@ -135,8 +134,8 @@ class VGGBase(nn.Module):
         out = F.relu(self.conv6(out))
         conv7_features = F.relu(self.conv7(out))
         return conv4_3_features, conv7_features
-    
-    
+
+
 class AuxLayers(nn.Module):
     """
     Auxiliary layers subsequent to the VGG base module of SSD
@@ -183,8 +182,8 @@ class AuxLayers(nn.Module):
         out = F.relu(self.conv11_2(out))
         conv11_2_ft = out
         return conv8_2_ft, conv9_2_ft, conv10_2_ft, conv11_2_ft
-    
-    
+
+
 class PredLayers(nn.Module):
     """
     Prediction conv layers to output bound box output and class probabilities
@@ -293,12 +292,16 @@ class PredLayers(nn.Module):
         class_scores = torch.cat([cl_conv4_3, cl_conv7, cl_conv8_2, cl_conv9_2, cl_conv10_2, cl_conv11_2], dim=1)
         
         return locations, class_scores
-    
-    
+
+
 class SSD300(nn.Module):
     
-    def __init__(self, n_classes):
+    def __init__(self, n_classes, device=None):
         super(SSD300, self).__init__()
+        if device is None:
+            self.device = "cpu"
+        else:
+            self.device = device
         self.n_classes = n_classes
         # network components
         self.base = VGGBase()
@@ -375,7 +378,7 @@ class SSD300(nn.Module):
                                 additional_scale = 1.
                             prior_boxes.append([cx, cy, additional_scale, additional_scale])
 
-        prior_boxes = torch.FloatTensor(prior_boxes).to(device)  # shape (8732, 4)
+        prior_boxes = torch.FloatTensor(prior_boxes).to(self.device)  # shape (8732, 4)
         prior_boxes.clamp_(0, 1) # truncate all values between [0,1]
 
         return prior_boxes    
@@ -489,7 +492,7 @@ class SSD300(nn.Module):
                 # Non-Maximum Suppression (NMS)
                 # init a torch.uint8 (byte) tensor to keep track of which predicted boxes to suppress
                 # 1 implies suppress, 0 implies don't suppress
-                suppression_idx = torch.zeros((n_above_min_score), dtype=torch.uint8).to(device)  # (n_qualified)
+                suppression_idx = torch.zeros((n_above_min_score), dtype=torch.uint8).to(self.device)  # (n_qualified)
 
                 # Consider each box in order of decreasing scores
                 for box in range(class_boxes.size(0)):
@@ -505,14 +508,14 @@ class SSD300(nn.Module):
 
                 # Store only unsuppressed boxes for this class
                 image_boxes.append(class_boxes[1 - suppression_idx])
-                image_labels.append(torch.LongTensor((1 - suppression_idx).sum().item() * [c]).to(device))
+                image_labels.append(torch.LongTensor((1 - suppression_idx).sum().item() * [c]).to(self.device))
                 image_scores.append(class_scores[1 - suppression_idx])
 
             # If no object in any class is found, store a placeholder for 'background'
             if len(image_boxes) == 0:
-                image_boxes.append(torch.FloatTensor([[0., 0., 1., 1.]]).to(device))
-                image_labels.append(torch.LongTensor([0]).to(device))
-                image_scores.append(torch.FloatTensor([0.]).to(device))
+                image_boxes.append(torch.FloatTensor([[0., 0., 1., 1.]]).to(self.device))
+                image_labels.append(torch.LongTensor([0]).to(self.device))
+                image_scores.append(torch.FloatTensor([0.]).to(self.device))
 
             # Concatenate into single tensors
             image_boxes = torch.cat(image_boxes, dim=0)  # (n_qualified, 4)
