@@ -27,6 +27,22 @@ def decimate(tensor, m):
     return tensor
 
 
+def he_init(layers, normal=True, **kaiming_params):
+    """
+    Initialize convolution parameters with Kaiming init
+    and initialize all bias parameters as zeros
+    """
+    if normal: 
+        method = nn.init.kaiming_normal_
+    else: 
+        method = nn.init.kaiming_uniform_
+    # go through all layers & initialize parameters one at a time
+    for c in layers:
+        if isinstance(c, nn.Conv2d):
+            method(c.weight, **kaiming_params)
+            nn.init.constant_(c.bias, 0.)
+
+
 class VGGBase(nn.Module):
     """
     Base VGG module of SSD network
@@ -141,18 +157,13 @@ class AuxLayers(nn.Module):
         self.conv11_1 = nn.Conv2d(256, 128, kernel_size=1, padding=0)
         self.conv11_2 = nn.Conv2d(128, 256, kernel_size=3, padding=0)  # dim. reduction because padding = 0
         # init layer parameters
-        self.init_conv2d()
-        
-
-    def init_conv2d(self):
-        """
-        Initialize convolution parameters with Xavier uniform
-        """
-        for c in self.children():
-            if isinstance(c, nn.Conv2d):
-                nn.init.xavier_uniform_(c.weight)
-                nn.init.constant_(c.bias, 0.)
-                
+        kaiming_params = {
+            'a': 0,
+            'mode': 'fan_in',
+            'nonlinearity': 'relu',
+        }
+        he_init(self.children(), **kaiming_params)
+                        
                 
     def forward(self, conv7_features):
         # conv8 fwd sequences
@@ -209,17 +220,12 @@ class PredLayers(nn.Module):
         self.cl_conv11_2 = nn.Conv2d(256,  n_boxes['conv11_2'] * n_classes, kernel_size=3, padding=1)
         
         # Initalize all convolution parameters
-        self.init_conv2d()
-        
-    
-    def init_conv2d(self):
-        """
-        Init conv2d layers with Xavier norm and 0 bias
-        """
-        for c in self.children():
-            if isinstance(c, nn.Conv2d):
-                nn.init.xavier_uniform_(c.weight)
-                nn.init.constant_(c.bias, 0.)
+        kaiming_params = {
+            'a': 0,
+            'mode': 'fan_in',
+            'nonlinearity': 'relu',
+        }
+        he_init(self.children(), **kaiming_params)
                 
                 
     def forward(self, conv4_3_ft, conv7_ft, conv8_2_ft, conv9_2_ft, conv10_2_ft, conv11_2_ft):
