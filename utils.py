@@ -292,6 +292,10 @@ class Coco2CenterCoord():
     size of image
     """       
     def __init__(self, w, h):
+        """
+        w: width of the original image size
+        h: height of the original image size
+        """
         self.w = w
         self.h = h
         
@@ -354,7 +358,8 @@ class OffsetCoord():
 def find_intersection(set_1, set_2):
     """
     Find the intersection of every box combination between two sets of boxes that are in 
-    boundary coordinates (x_1, y_1, x_2, y_2)
+    boundary coordinates (x_1, y_1, x_2, y_2) that define the upper left & lower right corner
+    boundaries of the bounding box
     :param set_1: set 1, a tensor of dimensions (n1, 4) in boundary coordinates
     :param set_2: set 2, a tensor of dimensions (n2, 4) in boundary coordinates
     :return: intersection of each of the boxes in set 1 with respect to each of the boxes 
@@ -376,12 +381,7 @@ def find_jaccard_overlap(set_1, set_2):
     :return: Jaccard Overlap of each of the boxes in set 1 with respect to each of the boxes in set 2, a tensor of dimensions (n1, n2)
     
     Code from: https://github.com/sgrvinod/a-PyTorch-Tutorial-to-Object-Detection/blob/master/utils.py
-    """
-    # convert from center coordinates to boundary coordinates
-    bcoord = BoundaryCoord()
-    set_1 = bcoord.encode(set_1)
-    set_2 = bcoord.encode(set_2)
-    
+    """    
     # Find intersections
     intersection = find_intersection(set_1, set_2)  # (n1, n2)
 
