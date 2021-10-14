@@ -14,7 +14,7 @@ class MultiBoxLoss(nn.Module):
     def __init__(self, img_sz, pboxes, threshold=0.5, neg_pos_ratio=3, alpha=1., device=None):
         """
         :param img_sz: input image size into object detection model (assumed to be square)
-        :param pboxes: prior bounding boxes of object detection model in center coordinates
+        :param pboxes: prior bounding boxes of object detection model, provided in center coordinates
         :param threshold: cutoff threshold on IoU overlap between a pair of true object box and prior bounding box
         :param neg_pos_ratio: ratio to be used in hard negative sample minning
         :param alpha: relative weighting between localization & classification losses
@@ -29,7 +29,8 @@ class MultiBoxLoss(nn.Module):
         self.boundaryCoord = BoundaryCoord()
         self.offsetCoord = OffsetCoord()
         # convert pboxes from center coordinates to boundary coordinates
-        self.pboxes = self.boundaryCoord.encode(pboxes).to(self.device)
+        self.pboxes_cc = pboxes.to(self.device)
+        self.pboxes_bc = self.boundaryCoord.encode(pboxes).to(self.device)
         self.threshold = threshold
         self.neg_pos_ratio = neg_pos_ratio
         self.alpha = alpha
@@ -44,14 +45,14 @@ class MultiBoxLoss(nn.Module):
         from an object detection model. N for batch size below.
         :param pred_boxes:  predicted bound boxes from object detection model in offset coordinates form; tensor of dim (N, 8732, 4)
         :param pred_scores: predicted classification scores from boject detection model; tensor of dim (N, 8732, n_classes)
-        :param true_boxes: ground truth label on location of each object in a batch of images, expressed in boundary coordinates; list of N tensors
+        :param true_boxes: ground truth label on location of each object in a batch of images, expressed in Coco coordinates; list of N tensors
         :param true_classes: grounth truth label on class of each object in a batch of images; list of N tensors
         
         :return: scalar loss measure
         """
         bs = pred_boxes.size(0)
         n_classes = pred_scores.size(-1)
-        n_priors  = self.pboxes.size(0)
+        n_priors  = self.pboxes_cc.size(0)
         assert n_priors == pred_boxes.size(1) == pred_scores.size(1)
         
         # init tensors for recording all ground truth objects/labels allocated to each prior bounding boxes
@@ -66,14 +67,15 @@ class MultiBoxLoss(nn.Module):
         #    overlap with (i.e. as offset coordinates)
         # and populate `true_cls` & `true_locs` so they captured all the class/location-offset assignment for all prior bounding 
         # boxes for each image in the batch
-        for i in range(bs):
+        for i in range(bs):            
             # get number of ground truth objects in image i
             n_objs = true_boxes[i].size(0)
-            # convert true_boxes[i] from Coco coord to boundary coordinates 
-            # in alignment with prior-bounding boxes
-            true_boxes[i] = self.boundaryCoord.encode(self.cocoCoord.encode(true_boxes[i]))
+            # convert true_boxes from Coco coordinates to center coordinates
+            true_boxes_cc = self.cocoCoord.encode(true_boxes[i])
+            true_boxes_bc = self.boundaryCoord.encode(true_boxes_cc)
             # find overlap of each ground truth objects with each of the prior bboxes
-            overlaps = find_jaccard_overlap(true_boxes[i], self.pboxes)  # (n_objects, 8732)
+            # note that both set of boxes need to be in boundary coord format
+            overlaps = find_jaccard_overlap(true_boxes_bc, self.pboxes_bc)  # (n_objects, 8732)
             # find the best ground truth object overlaping with each prior bounding boxes
             obj_overlap_for_each_prior, obj_idx_for_each_prior = overlaps.max(dim=0)  # (8732)
             # conversely, find the best bounding box overlap with each ground truth objects
@@ -96,16 +98,10 @@ class MultiBoxLoss(nn.Module):
             obj_label_for_each_prior[obj_overlap_for_each_prior < self.threshold] = 0
             
             # add true object class label allocation for each prior bounding box
-            true_cls[i] = obj_label_for_each_prior
-            # convert prior bboxes (which was encoded into boundary coordinates in the beginning)
-            # back into center coordinates
-            self.pboxes = self.boundaryCoord.decode(self.pboxes)
-            # convert true_boxes (which was encoded into boundary coordinates when computing Jaccard overlap)
-            # into center coordinates
-            true_boxes[i] = self.boundaryCoord.decode(true_boxes[i])
+            true_cls[i] = obj_label_for_each_prior            
             # convert the ground truth object locations into offset coordinate format wrt to prior bboxes
-            # note: both true_boxes & self.pboxes are expressed in center coordinates            
-            true_locs[i] = self.offsetCoord.encode(true_boxes[i][obj_idx_for_each_prior], self.pboxes)
+            # note: both true_boxes & self.pboxes need to be expressed in center coordinates            
+            true_locs[i] = self.offsetCoord.encode(true_boxes_cc[obj_idx_for_each_prior], self.pboxes_cc)
 
         # create flag for all non-background prior bounding boxes (i.e. class label = 0)
         positive_priors = true_cls != 0
