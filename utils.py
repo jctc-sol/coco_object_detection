@@ -185,7 +185,16 @@ class Normalize(object):
     def __call__(self, sample):
         image = sample['image']
         sample['image'] = FT.normalize(image, self.mean, self.std)
-        return sample            
+        return sample
+
+
+    def decode(self, image):
+        """
+        image: single [C, W, H] image
+        """
+        for img, mean, std in zip(image, self.mean, self.std):
+            img.mul_(std).add_(mean)
+        return image
 
 
 class ImageToTensor(object):
@@ -335,23 +344,26 @@ class OffsetCoord():
     """
     def __init__(self):
         pass
+
         
-    def encode(self, cxcy, priors_cxcy):
+    def encode(self, cxcy, priors_cxcy):        
         """
+        converts cxcy (center coordinates) to oxoy (offset coordinates)        
         cxcy: bounding box in center-coordinate format
         prior_cxcy: prior box in center-coordinate format
         """
-        dxdy = (cxcy[:,:2] - priors_cxcy[:,:2]) / (priors_cxcy[:,2:] / 10)
-        dwdh = torch.log(cxcy[:,2:] / priors_cxcy[:,2:]) * 5
-        return torch.cat([dxdy, dwdh], dim=1)
+        oxoy = (cxcy[:,:2] - priors_cxcy[:,:2]) / (priors_cxcy[:,2:] / 10)
+        owoh = torch.log(cxcy[:,2:] / priors_cxcy[:,2:]) * 5
+        return torch.cat([oxoy, owoh], dim=1)
     
     
-    def decode(self, dxdy, priors_cxcy):
+    def decode(self, oxoy, priors_cxcy):
         """
-        dxdy: bounding boxes in offset-coordinate format wrt SSD's prior bounding boxes
+        converts oxoy (offset coordinates) back to cxcy (center coordinates)
+        oxoy: bounding boxes in offset-coordinate format wrt SSD's prior bounding boxes
         """
-        cxcy = dxdy[:,:2] * priors_cxcy[:,2:] / 10 + priors_cxcy[:,:2]
-        cwch = torch.exp(dxdy[:,2:] / 5) * priors_cxcy[:,2:]
+        cxcy = oxoy[:,:2] * priors_cxcy[:,2:] / 10 + priors_cxcy[:,:2]
+        cwch = torch.exp(oxoy[:,2:] / 5) * priors_cxcy[:,2:]
         return torch.cat([cxcy, cwch], dim=1)
     
     

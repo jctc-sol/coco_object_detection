@@ -7,7 +7,7 @@ from utils   import *
 
 class mAP():
     
-    def __init__(self, n_classes, device):
+    def __init__(self, n_classes, device=None):
         """
         :param n_classes: number of class objects to compute mean AP over; note that 0 
                           should be reserved as background class

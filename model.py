@@ -339,7 +339,7 @@ class SSD300(nn.Module):
         # Rescale factor is initially set at 20, but it is learnable for each channel during back-prop
         self.rescale_factors = nn.Parameter(torch.FloatTensor(1, 512, 1, 1))
         nn.init.constant_(self.rescale_factors, 20) # init values to 20
-        # create prior boxes
+        # create prior boxes in center coordiantes
         self.prior_boxes = self.create_prior_boxes()
         # instantiate a coordinate transformation object to decipher object location
         # output in prior box offset coordinate format to center coordinate format
@@ -458,7 +458,7 @@ class SSD300(nn.Module):
         For each below, let M be `batch_size`, `n_i` is the number of predicted objects in each image, and 
         `N_i` is the number of true objects in each image.
         
-        :param predicted_boxes: predicted locators in center coordinates w.r.t the 8732 prior anchor/bounding 
+        :param predicted_boxes: predicted locators in offset coordinates w.r.t the 8732 prior anchor/bounding 
                                 boxes, a tensor of dimensions (M, 8732, 4)
         :param predicted_scores: predicted class scores for each of the 8732 prior anchor/bounding box locations, 
                                  a tensor of dimensions (M, 8732, n_classes)
@@ -474,14 +474,14 @@ class SSD300(nn.Module):
         
         Source ref: https://github.com/sgrvinod/a-PyTorch-Tutorial-to-Object-Detection/blob/master/model.py#L426
         """
-        # ensure # of prior boxes align across input location & score predictions
-        assert n_priors == predicted_boxes.size(1) == predicted_scores.size(1),\
-        "number of bbox location prediction & bbox class prediction mismatch"
-
         batch_size = predicted_boxes.size(0)
         n_priors   = self.prior_boxes.size(0)
         # apply softmax to the class scores
         predicted_scores = F.softmax(predicted_scores, dim=2)
+
+        # ensure # of prior boxes align across input location & score predictions
+        assert n_priors == predicted_boxes.size(1) == predicted_scores.size(1),\
+        "number of bbox location prediction & bbox class prediction mismatch"
 
         # Lists to store final predicted boxes, labels, and scores for all images
         detected_boxes  = list()
@@ -496,11 +496,13 @@ class SSD300(nn.Module):
             image_labels = list()
             image_scores = list()
             
-            # model output of predicted boxes are natively in prior bounding box offset coordinate format,
-            # first decode it back to center box coordinate format, then from center box coordinate to
-            # boundary coordinate format
+            # model output of predicted boxes are natively in offset coordinate format,
+            # first decode it back to center box coordinate format, then encode from 
+            # center box coordinate to boundary coordinate format
             predicted_boxes_bc = self.cc2bc.encode(
-                self.oc2cc.encode(predicted_boxes[i], self.prior_boxes)
+                # decode predicted_boxes from offset coordinates to center coordinates
+                # note that self.prior_boxes are in center coordinates
+                self.oc2cc.decode(predicted_boxes[i], self.prior_boxes)
             )  # size (8732, 4)
             
             # determine the most probable class & score from the softmax of predicted_scores
