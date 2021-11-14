@@ -20,10 +20,16 @@ class MultiBoxLoss(nn.Module):
         :param alpha: relative weighting between localization & classification losses
         """
         super(MultiBoxLoss, self).__init__()
-        if device is None:
-            self.device = "cpu"
+        # setup device
+        if device:
+            if type(device)==torch.device: 
+                self.device=device
+            elif type(device)==str:
+                self.device=torch.device(device)
         else:
-            self.device = device
+            # defaults to cuda:0 if cuda is available
+            if torch.cuda.is_available(): self.device = torch.device('cuda:0') 
+            else: self.device = torch.device('cpu')
         # coordinate transforms
         self.cocoCoord = Coco2CenterCoord(img_sz,img_sz)
         self.boundaryCoord = BoundaryCoord()
