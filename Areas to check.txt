@@ -1,0 +1,7 @@
+Areas to check:
+
+- all boundary/center-size coordinates are expressed as fractions [0, 1] wrt input image size
+
+- the folding of Fully Connected layers into Conv layers are done correctly, in that the parameter positions are correct after folding
+
+- "Priors are manually but carefully chosen based on the shapes and sizes of ground truth objects in our dataset." - re-examine whether predefined prior boxes make sense for coco dataset

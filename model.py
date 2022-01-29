@@ -318,7 +318,7 @@ class PredLayers(nn.Module):
         # There are a total of 5776 + 2166 + 600 + 150 + 36 + 4 = 8732 bounding box locations in total
         locations = torch.cat([l_conv4_3, l_conv7, l_conv8_2, l_conv9_2, l_conv10_2, l_conv11_2], dim=1)
         class_scores = torch.cat([cl_conv4_3, cl_conv7, cl_conv8_2, cl_conv9_2, cl_conv10_2, cl_conv11_2], dim=1)
-        
+                
         return locations, class_scores
 
 
@@ -361,26 +361,26 @@ class SSD300(nn.Module):
         """
         # size of the kernels in each respective feature map layer in the prediction
         # network after permuting the convolution output
-        fmap_dims = {'conv4_3': 38,
-                     'conv7': 19,
-                     'conv8_2': 10,
-                     'conv9_2': 5,
+        fmap_dims = {'conv4_3' : 38,
+                     'conv7'   : 19,
+                     'conv8_2' : 10,
+                     'conv9_2' : 5,
                      'conv10_2': 3,
                      'conv11_2': 1}
         
         # relative scale of each feature map to the input image
-        obj_scales = {'conv4_3': 0.1,
-                      'conv7': 0.2,
-                      'conv8_2': 0.375,
-                      'conv9_2': 0.55,
+        obj_scales = {'conv4_3' : 0.1,
+                      'conv7'   : 0.2,
+                      'conv8_2' : 0.375,
+                      'conv9_2' : 0.55,
                       'conv10_2': 0.725,
                       'conv11_2': 0.9}
 
         # different aspect ratio bounding boxes to use at each feature map layer
-        aspect_ratios = {'conv4_3':  [1., 2., 0.5],
-                         'conv7':    [1., 2., 3., 0.5, .333],
-                         'conv8_2':  [1., 2., 3., 0.5, .333],
-                         'conv9_2':  [1., 2., 3., 0.5, .333],
+        aspect_ratios = {'conv4_3' : [1., 2., 0.5],
+                         'conv7'   : [1., 2., 3., 0.5, .333],
+                         'conv8_2' : [1., 2., 3., 0.5, .333],
+                         'conv9_2' : [1., 2., 3., 0.5, .333],
                          'conv10_2': [1., 2., 0.5],
                          'conv11_2': [1., 2., 0.5]}
         

@@ -125,7 +125,7 @@ class Zoomout(object):
 class Flip(object):
     """
     (Ref: https://github.com/sgrvinod/a-PyTorch-Tutorial-to-Object-Detection/blob/master/utils.py)
-    Perform a flip of the image about the vertical axis of the image.
+    Perform a flip of the image about the vertical axis of the image (i.e. horizontal flip)
     """
     def __init__(self, p):
         self.proba = p
@@ -137,7 +137,7 @@ class Flip(object):
             boxes = sample['boxes']
             # flip image
             sample['image'] = FT.hflip(image)
-            # flip boxes
+            # flip boxes                    
             boxes[:,0] = image.width - boxes[:,0] - 1 - boxes[:,2]
             sample['boxes'] = boxes
         return sample
@@ -160,7 +160,7 @@ class Resize(object):
         new_image = FT.resize(image, self.target_size)
         new_height, new_width = new_image.size()[1], new_image.size()[2]
         # resize boxes
-        boxes = sample['boxes']        
+        boxes = sample['boxes']    
         boxes[:,0] = boxes[:,0] * new_width / width
         boxes[:,1] = boxes[:,1] * new_height / height
         boxes[:,2] = boxes[:,2] * new_width / width
@@ -168,7 +168,33 @@ class Resize(object):
         sample['image'] = new_image
         sample['boxes'] = boxes
         return sample
+
     
+class CocoBoxToFracBoundaryBox(object):
+    """
+    Convert bounding box coordinates from COCO dataset format (x,y,w,h)
+    to fractional boundary box coordinates (x_min,y_min,x_max,y_max)
+    where each value is normalized between [0,1]
+    """
+    def __init__(self):
+        pass
+    
+    def __call__(self, sample):
+        image = sample['image']                
+        height, width = image.size()[1], image.size()[2]
+        # convert COCO coordinates to bounding box coordinates
+        boxes = sample['boxes']
+        boxes[:,2] = boxes[:,0] + boxes[:,2]
+        boxes[:,3] = boxes[:,1] + boxes[:,3]
+        # normalize coordinates by image dims
+        boxes[:,0] = boxes[:,0] / width
+        boxes[:,1] = boxes[:,1] / height
+        boxes[:,2] = boxes[:,2] / width
+        boxes[:,3] = boxes[:,3] / height
+        # boxes = np.clip(boxes, 0, 1)
+        sample['boxes'] = boxes
+        return sample
+        
 
 class Normalize(object):
     """
@@ -270,12 +296,13 @@ class BoundaryCoord():
         boxes: bounding boxes tensor in center coordinates (x_c, y_c, w_c, h_c) format
         return: bounding boxes tensor in boundary coordinates (x_1, y_1, x_2, y_2) format
         """
-        x1 = boxes[:,0] - boxes[:,2]/2.0
-        y1 = boxes[:,1] - boxes[:,3]/2.0
-        x2 = boxes[:,0] + boxes[:,2]/2.0
-        y2 = boxes[:,1] + boxes[:,3]/2.0        
-        coords = [x1, y1, x2, y2]        
-        return torch.cat([c.unsqueeze(-1) for c in coords], dim=-1)    
+        w_c, h_c = boxes[:,2], boxes[:,3]
+        x1 = boxes[:,0] - w_c/2.0
+        y1 = boxes[:,1] - h_c/2.0
+        x2 = boxes[:,0] + w_c/2.0
+        y2 = boxes[:,1] + h_c/2.0
+        coords = [x1, y1, x2, y2]
+        return torch.clip(torch.cat([c.unsqueeze(-1) for c in coords], dim=-1), 0, 1)
         
     def decode(self, boxes):
         """
@@ -289,47 +316,6 @@ class BoundaryCoord():
         x_c = boxes[:,0] + w_c/2.0
         y_c = boxes[:,1] + h_c/2.0
         coords = [x_c, y_c, w_c, h_c]
-        return torch.cat([c.unsqueeze(-1) for c in coords], dim=-1)
-
-    
-class Coco2CenterCoord():
-    """
-    Encodes/Decodes original COCO bounding box coordinates (x, y, w, h) where (x, y)
-    represent the top-left corner of bounding box (in image coordinate frame) to Center 
-    coordinates (x_c, y_c, w_c, h_c) where (x_c, y_c) represent the center of the bounding box, 
-    furthermore, both (x_c, y_c) and (w_c, h_c) are normalized with respect to the original 
-    size of image
-    """       
-    def __init__(self, w, h):
-        """
-        w: width of the original image size
-        h: height of the original image size
-        """
-        self.w = w
-        self.h = h
-        
-    def encode(self, boxes):
-        """
-        Encodes bounding boxes tensor in COCO coordinates to Center coordinates.
-        boxes: bounding boxes tensor with coordinates in original COCO (x, y, w, h) format
-        """
-        x_c = (boxes[:,0] + boxes[:,2]/2.0)/self.w
-        y_c = (boxes[:,1] + boxes[:,3]/2.0)/self.h
-        w_c = boxes[:,2]/self.w
-        h_c = boxes[:,3]/self.h
-        coords = [x_c, y_c, w_c, h_c]        
-        return torch.cat([c.unsqueeze(-1) for c in coords], dim=-1)
-    
-    def decode(self, boxes_c):
-        """
-        Decodes bounding boxes tensor in Center coordinates coordinates to COCO coordinates.
-        boxes_c: bounding boxes tensor with coordinates in center coordinates (x_c, y_c, w_c, h_c) format
-        """
-        x = (boxes_c[:,0] - boxes_c[:,2]/2.0) * self.w
-        y = (boxes_c[:,1] - boxes_c[:,3]/2.0) * self.h
-        width  = boxes_c[:,2] * self.w
-        height = boxes_c[:,3] * self.h
-        coords = [x, y, width, height]        
         return torch.cat([c.unsqueeze(-1) for c in coords], dim=-1)
     
 
